@@ -1,215 +1,223 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Random Cleaning Task</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            text-align: center;
-            padding: 20px;
-            background-color: #f0f0f0;
-        }
-        #task {
-            font-size: 24px;
-            margin: 20px 0;
-            color: #333;
-        }
-        #qrcode {
-            margin: 20px auto;
-        }
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-        }
-        button:hover {
-            background-color: #45a049;
-        }
-        #resetButton {
-            display: none; /* Hidden by default */
-        }
-    </style>
-</head>
-<body>
-    <h1>Daily Cleaning Task</h1>
-    <div id="task">Scan the QR code to get a task!</div>
-    <div id="qrcode"></div>
-    <button id="resetButton" onclick="resetTasks()">Reset Tasks Now</button>
+     <html lang="en">
+     <head>
+         <meta charset="UTF-8">
+         <meta name="viewport" content="width=device-width, initial-scale=1.0">
+         <title>Random Cleaning Task</title>
+         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+         <style>
+             body {
+                 font-family: Arial, sans-serif;
+                 text-align: center;
+                 padding: 20px;
+                 background-color: #f0f0f0;
+             }
+             #task {
+                 font-size: 24px;
+                 margin: 20px 0;
+                 color: #333;
+             }
+             #qrcode {
+                 margin: 20px auto;
+             }
+             button {
+                 padding: 10px 20px;
+                 font-size: 16px;
+                 background-color: #4CAF50;
+                 color: white;
+                 border: none;
+                 border-radius: 5px;
+                 cursor: pointer;
+             }
+             button:hover {
+                 background-color: #45a049;
+             }
+             #resetButton {
+                 display: none; /* Hidden by default */
+             }
+         </style>
+     </head>
+     <body>
+         <h1>Daily Cleaning Task</h1>
+         <div id="task">Scan the QR code to get a task!</div>
+         <div id="qrcode"></div>
+         <button id="resetButton" onclick="resetTasks()">Reset Tasks Now</button>
 
-    <script>
-        const STORAGE_KEY = 'cleaningTasks';
-        const TIMESTAMP_KEY = 'lastReset';
-        const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Ef6UvPhkzs18u-A8MkcSx3vqrjf5iG6ujqu7zNIVtiM/gviz/tq?tqx=out:json';
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDHQcUQZTBMH7FsNS1mAI5pWhXm73_kO6BCeJxWURgSp6cc9HoY5d4iVQjGj2iko_u8A/exec'; // Replace with your Apps Script URL
+         <script>
+             const STORAGE_KEY = 'cleaningTasks';
+             const TIMESTAMP_KEY = 'lastReset';
+             const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Ef6UvPhkzs18u-A8MkcSx3vqrjf5iG6ujqu7zNIVtiM/gviz/tq?tqx=out:json&t=' + new Date().getTime();
+             const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzDHQcUQZTBMH7FsNS1mAI5pWhXm73_kO6BCeJxWURgSp6cc9HoY5d4iVQjGj2iko_u8A/exec';
 
-        async function fetchTasksFromSheet() {
-            try {
-                const response = await fetch(GOOGLE_SHEET_URL);
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const text = await response.text();
-                const jsonString = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/)[1];
-                const data = JSON.parse(jsonString);
-                const rows = data.table.rows;
+             async function fetchTasksFromSheet() {
+                 try {
+                     const response = await fetch(GOOGLE_SHEET_URL, {
+                         headers: {
+                             'Accept': 'text/plain, application/json'
+                         }
+                     });
+                     if (!response.ok) {
+                         throw new Error(`HTTP error! Status: ${response.status}`);
+                     }
+                     const text = await response.text();
+                     const jsonStringMatch = text.match(/\/\*O_o\*\/[\s\S]*google\.visualization\.Query\.setResponse\((.*)\)/) || text.match(/google\.visualization\.Query\.setResponse\((.*)\)/);
+                     if (!jsonStringMatch) {
+                         throw new Error('No JSON data found in response');
+                     }
+                     const jsonString = jsonStringMatch[1];
+                     const data = JSON.parse(jsonString);
+                     const rows = data.table.rows;
 
-                const tasks = rows.slice(1).map(row => {
-                    const availableValue = row.c[3]?.v;
-                    // Handle both string "TRUE" and boolean true (from formulas like =TRUE)
-                    const isAvailable = availableValue === true || String(availableValue).toUpperCase() === 'TRUE';
-                    return {
-                        id: row.c[0]?.v || '',
-                        description: row.c[1]?.v || '',
-                        weight: parseInt(row.c[2]?.v || 1),
-                        available: isAvailable
-                    };
-                }).filter(task => task.available);
-                console.log('Fetched tasks:', tasks);
+                     const tasks = rows.slice(1).map(row => {
+                         const availableValue = row.c[3]?.v;
+                         const isAvailable = availableValue === true || String(availableValue).toUpperCase() === 'TRUE';
+                         return {
+                             id: row.c[0]?.v || '',
+                             description: (row.c[1]?.v || '').trim(),
+                             weight: parseInt(row.c[2]?.v || 1),
+                             available: isAvailable
+                         };
+                     }).filter(task => task.available);
+                     console.log('Fetched tasks:', tasks);
 
-                const lastReset = rows[0].c[5]?.v || 0; // F1
-                console.log('Last reset timestamp:', lastReset);
-                return { tasks, lastReset };
-            } catch (error) {
-                console.error('Error fetching tasks from Google Sheet:', error.message);
-                return { tasks: [], lastReset: 0 };
-            }
-        }
+                     const lastReset = rows[0].c[5]?.v || 0; // F1
+                     console.log('Last reset timestamp:', lastReset);
+                     return { tasks, lastReset };
+                 } catch (error) {
+                     console.error('Error fetching tasks from Google Sheet:', error.message);
+                     return { tasks: [], lastReset: 0 };
+                 }
+             }
 
-        async function updateTaskAvailability(taskId) {
-            try {
-                console.log('Updating task ID:', taskId);
-                const response = await fetch(GOOGLE_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'updateTask', taskId }),
-                    mode: 'cors',
-                    redirect: 'follow'
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const result = await response.text();
-                console.log('Update result:', result);
-            } catch (error) {
-                console.error('Error updating task availability:', error.message);
-            }
-        }
+             async function updateTaskAvailability(taskId) {
+                 try {
+                     console.log('Attempting to update task ID:', taskId);
+                     console.log('Using GOOGLE_SCRIPT_URL:', GOOGLE_SCRIPT_URL);
+                     const response = await fetch(GOOGLE_SCRIPT_URL, {
+                         method: 'POST',
+                         headers: {
+                             'Content-Type': 'application/json'
+                         },
+                         body: JSON.stringify({ action: 'updateTask', taskId: Number(taskId) }),
+                         mode: 'no-cors', // Avoid CORS issues
+                         redirect: 'follow'
+                     });
+                     console.log('Update request sent for task ID:', taskId);
+                     // Note: With mode: 'no-cors', we can't read the response body
+                 } catch (error) {
+                     console.error('Error updating task availability:', error.message);
+                     console.error('Error details:', error);
+                 }
+             }
 
-        async function resetTasksInSheet(timestamp) {
-            try {
-                console.log('Resetting tasks with timestamp:', timestamp);
-                const response = await fetch(GOOGLE_SCRIPT_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ action: 'resetTasks', timestamp }),
-                    mode: 'cors',
-                    redirect: 'follow'
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! Status: ${response.status}`);
-                }
-                const result = await response.text();
-                console.log('Reset result:', result);
-            } catch (error) {
-                console.error('Error resetting tasks:', error.message);
-            }
-        }
+             async function resetTasksInSheet(timestamp) {
+                 try {
+                     console.log('Resetting tasks with timestamp:', timestamp);
+                     const response = await fetch(GOOGLE_SCRIPT_URL, {
+                         method: 'POST',
+                         headers: {
+                             'Content-Type': 'application/json'
+                         },
+                         body: JSON.stringify({ action: 'resetTasks', timestamp }),
+                         mode: 'no-cors', // Avoid CORS issues
+                         redirect: 'follow'
+                     });
+                     console.log('Reset request sent with timestamp:', timestamp);
+                     // Note: With mode: 'no-cors', we can't read the response body
+                 } catch (error) {
+                     console.error('Error resetting tasks:', error.message);
+                 }
+             }
 
-        function getStoredData(lastResetFromSheet) {
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM AKDT
-            const lastResetDate = lastResetFromSheet ? new Date(parseInt(lastResetFromSheet)) : null;
+             function getStoredData(lastResetFromSheet) {
+                 const now = new Date();
+                 const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM AKDT
+                 const lastResetDate = lastResetFromSheet ? new Date(parseInt(lastResetFromSheet)) : null;
 
-            // Reset if past 4 PM today and last reset was before today's 4 PM
-            if (lastResetFromSheet && (now >= today && (!lastResetDate || lastResetDate < today))) {
-                console.log('Triggering reset: Current time is past 4 PM or last reset was before today\'s 4 PM');
-                resetTasksInSheet(now.getTime());
-                return { remainingTasks: null, lastReset: now.getTime() };
-            }
+                 console.log('Current time:', now);
+                 console.log('Today 4 PM:', today);
+                 console.log('Last reset date:', lastResetDate);
 
-            return {
-                remainingTasks: null, // Always fetch from sheet
-                lastReset: lastResetFromSheet || now.getTime()
-            };
-        }
+                 if (lastResetFromSheet && (now >= today && (!lastResetDate || lastResetDate < today))) {
+                     console.log('Triggering reset: Current time is past 4 PM or last reset was before today\'s 4 PM');
+                     resetTasksInSheet(now.getTime());
+                     return { remainingTasks: null, lastReset: now.getTime() };
+                 }
 
-        async function getRandomTask() {
-            const { tasks, lastReset } = await fetchTasksFromSheet();
-            const { lastReset: storedLastReset } = getStoredData(lastReset);
+                 return {
+                     remainingTasks: null,
+                     lastReset: lastResetFromSheet || now.getTime()
+                 };
+             }
 
-            if (tasks.length === 0) {
-                console.log('No tasks available to select');
-                return "No tasks left for today!";
-            }
+             async function getRandomTask() {
+                 console.log('Starting getRandomTask');
+                 const { tasks, lastReset } = await fetchTasksFromSheet();
+                 const { lastReset: storedLastReset } = getStoredData(lastReset);
 
-            // Assign weights and select task
-            const weights = tasks.map(task => task.weight);
-            const totalWeight = weights.reduce((sum, w) => sum + w, 0);
-            let random = Math.random() * totalWeight;
+                 if (tasks.length === 0) {
+                     console.log('No tasks available to select');
+                     return "No tasks left for today!";
+                 }
 
-            let selectedIndex = 0;
-            for (let i = 0; i < weights.length; i++) {
-                random -= weights[i];
-                if (random <= 0) {
-                    selectedIndex = i;
-                    break;
-                }
-            }
+                 const weights = tasks.map(task => task.weight);
+                 const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+                 let random = Math.random() * totalWeight;
 
-            const selectedTask = tasks[selectedIndex];
-            console.log('Selected task:', selectedTask);
-            await updateTaskAvailability(selectedTask.id);
-            return selectedTask.description;
-        }
+                 let selectedIndex = 0;
+                 for (let i = 0; i < weights.length; i++) {
+                     random -= weights[i];
+                     if (random <= 0) {
+                         selectedIndex = i;
+                         break;
+                     }
+                 }
 
-        async function resetTasks() {
-            const now = new Date().getTime();
-            await resetTasksInSheet(now);
-            document.getElementById('task').innerText = "Tasks reset! Scan to get a new task.";
-        }
+                 const selectedTask = tasks[selectedIndex];
+                 console.log('Selected task:', selectedTask);
+                 console.log('Calling updateTaskAvailability for task ID:', selectedTask.id);
+                 await updateTaskAvailability(selectedTask.id);
+                 console.log('Finished updateTaskAvailability');
+                 return selectedTask.description;
+             }
 
-        function displayTask() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('getTask')) {
-                getRandomTask().then(task => {
-                    document.getElementById('task').innerText = task;
-                });
-            }
-        }
+             async function resetTasks() {
+                 const now = new Date().getTime();
+                 await resetTasksInSheet(now);
+                 document.getElementById('task').innerText = "Tasks reset! Scan to get a new task.";
+             }
 
-        function checkAdminAccess() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('admin') && urlParams.get('admin') === 'true') {
-                document.getElementById('resetButton').style.display = 'block';
-            }
-        }
+             function displayTask() {
+                 const urlParams = new URLSearchParams(window.location.search);
+                 if (urlParams.has('getTask')) {
+                     getRandomTask().then(task => {
+                         document.getElementById('task').innerText = task;
+                     });
+                 }
+             }
 
-        function generateQRCode() {
-            const currentUrl = window.location.href.split('?')[0];
-            const taskUrl = `${currentUrl}?getTask=true`;
-            new QRCode(document.getElementById("qrcode"), {
-                text: taskUrl,
-                width: 200,
-                height: 200
-            });
-        }
+             function checkAdminAccess() {
+                 const urlParams = new URLSearchParams(window.location.search);
+                 if (urlParams.has('admin') && urlParams.get('admin') === 'true') {
+                     document.getElementById('resetButton').style.display = 'block';
+                 }
+             }
 
-        window.onload = () => {
-            generateQRCode();
-            displayTask();
-            checkAdminAccess();
-        };
-    </script>
-</body>
-</html>
+             function generateQRCode() {
+                 const currentUrl = window.location.href.split('?')[0];
+                 const taskUrl = `${currentUrl}?getTask=true`;
+                 new QRCode(document.getElementById("qrcode"), {
+                     text: taskUrl,
+                     width: 200,
+                     height: 200
+                 });
+             }
+
+             window.onload = () => {
+                 generateQRCode();
+                 displayTask();
+                 checkAdminAccess();
+             };
+         </script>
+     </body>
+     </html>
