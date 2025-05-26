@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Random Cleaning Task</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        #task {
+            font-size: 24px;
+            margin: 20px 0;
+            color: #333;
+        }
+        #qrcode {
+            margin: 20px auto;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        #resetButton {
+            display: none; /* Hidden by default */
+        }
+    </style>
+</head>
+<body>
+    <h1>Daily Cleaning Task</h1>
+    <div id="task">Scan the QR code to get a task!</div>
+    <div id="qrcode"></div>
+    <button id="resetButton" onclick="resetTasks()">Reset Tasks Now</button>
+
+    <script>
+        const tasks = [
+            "End of night put drying dishes away",
+            "Wipe bathroom counter",
+            "Scrub toilets",
+            "Put linens in laundry basket downstairs",
+            "Sweep Kitchen & Dining Room",
+            "Empty all room trash cans into bathroom trashcan if 3/4th full take outside",
+            "Kitchen trash 3/4 full take out & recycling (keep liner)",
+            "Vacuum hallway & your room",
+            "Wipe down your rooms window seal & bathroom window seal",
+            "Wipe down showers",
+            "Sweep bathroom",
+            "Organize brochure case",
+            "Wipe bathroom sinks"
+        ];
+
+        const STORAGE_KEY = 'cleaningTasks';
+        const TIMESTAMP_KEY = 'lastReset';
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwO88huoFkRnogiqbbeHw7LF3Z6PThamGXc8roItx-7vUNTRAjwU4Tnsj6Hqt_qb6m-SQ/exec';
+
+        function getStoredData() {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            const lastReset = localStorage.getItem(TIMESTAMP_KEY);
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM
+            const lastResetDate = lastReset ? new Date(parseInt(lastReset)) : null;
+
+            // Reset if past 4 PM today and last reset was before today's 4 PM
+            if (lastReset && (now >= today && (!lastResetDate || lastResetDate < today))) {
+                localStorage.removeItem(STORAGE_KEY);
+                localStorage.setItem(TIMESTAMP_KEY, now.getTime().toString());
+                return { remainingTasks: [...tasks], lastReset: now.getTime() };
+            }
+
+            return {
+                remainingTasks: stored ? JSON.parse(stored) : [...tasks],
+                lastReset: lastReset ? parseInt(lastReset) : now.getTime()
+            };
+        }
+
+        function saveStoredData(remainingTasks, lastReset) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(remainingTasks));
+            localStorage.setItem(TIMESTAMP_KEY, lastReset.toString());
+        }
+
+        async function logTaskToGoogleSheet(task) {
+            const now = new Date();
+            const dateString = now.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ date: dateString, task: task }),
+                    mode: 'cors',
+                    redirect: 'follow'
+                });
+
+                const responseText = await response.text();
+                if (!response.ok) {
+                    console.error('Failed to log task:', response.status, response.statusText, responseText);
+                } else {
+                    console.log('Task logged successfully:', responseText);
+                }
+            } catch (error) {
+                console.error('Error logging task:', error);
+            }
+        }
+
+        async function getRandomTask() {
+            let { remainingTasks, lastReset } = getStoredData();
+
+            if (remainingTasks.length === 0) {
+                return "No tasks left for today!";
+            }
+
+            // Assign weights: first task gets highest weight (length), last gets 1
+            const weights = remainingTasks.map((_, index) => remainingTasks.length - index);
+            const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+            let random = Math.random() * totalWeight;
+
+            let selectedIndex = 0;
+            for (let i = 0; i < weights.length; i++) {
+                random -= weights[i];
+                if (random <= 0) {
+                    selectedIndex = i;
+                    break;
+                }
+            }
+
+            const selectedTask = remainingTasks[selectedIndex];
+            remainingTasks.splice(selectedIndex, 1);
+
+            saveStoredData(remainingTasks, lastReset);
+            await logTaskToGoogleSheet(selectedTask); // Log task to Google Sheet
+            return selectedTask;
+        }
+
+        function resetTasks() {
+            const now = new Date().getTime();
+            saveStoredData([...tasks], now);
+            document.getElementById('task').innerText = "Tasks reset! Scan to get a new task.";
+        }
+
+        function displayTask() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('getTask')) {
+                getRandomTask().then(task => {
+                    document.getElementById('task').innerText = task;
+                });
+            }
+        }
+
+        function checkAdminAccess() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('admin') && urlParams.get('admin') === 'true') {
+                document.getElementById('resetButton').style.display = 'block';
+            }
+        }
+
+        function generateQRCode() {
+            const currentUrl = window.location.href.split('?')[0];
+            const taskUrl = `${currentUrl}?getTask=true`;
+            new QRCode(document.getElementById("qrcode"), {
+                text: taskUrl,
+                width: 200,
+                height: 200
+            });
+        }
+
+        window.onload = () => {
+            generateQRCode();
+            displayTask();
+            checkAdminAccess();
+        };
+    </script>
+</body>
+</html>
