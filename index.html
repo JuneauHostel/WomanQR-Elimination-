@@ -44,90 +44,98 @@
     <button id="resetButton" onclick="resetTasks()">Reset Tasks Now</button>
 
     <script>
-        const tasks = [
-            "End of night put drying dishes away",
-            "Wipe bathroom counter",
-            "Scrub toilets",
-            "Put linens in laundry basket downstairs",
-            "Sweep Kitchen & Dining Room",
-            "Empty all room trash cans into bathroom trashcan if 3/4th full take outside",
-            "Kitchen trash 3/4 full take out & recycling (keep liner)",
-            "Vacuum hallway & your room",
-            "Wipe down your rooms window seal & bathroom window seal",
-            "Wipe down showers",
-            "Sweep bathroom",
-            "Organize brochure case",
-            "Wipe bathroom sinks"
-        ];
-
         const STORAGE_KEY = 'cleaningTasks';
         const TIMESTAMP_KEY = 'lastReset';
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwO88huoFkRnogiqbbeHw7LF3Z6PThamGXc8roItx-7vUNTRAjwU4Tnsj6Hqt_qb6m-SQ/exec';
+        const GOOGLE_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Ef6UvPhkzs18u-A8MkcSx3vqrjf5iG6ujqu7zNIVtiM/gviz/tq?tqx=out:json';
+        const GOOGLE_SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL'; // Replace with your Apps Script URL
 
-        function getStoredData() {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            const lastReset = localStorage.getItem(TIMESTAMP_KEY);
-            const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM
-            const lastResetDate = lastReset ? new Date(parseInt(lastReset)) : null;
+        async function fetchTasksFromSheet() {
+            try {
+                const response = await fetch(GOOGLE_SHEET_URL);
+                const text = await response.text();
+                const jsonString = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/)[1];
+                const data = JSON.parse(jsonString);
+                const rows = data.table.rows;
 
-            // Reset if past 4 PM today and last reset was before today's 4 PM
-            if (lastReset && (now >= today && (!lastResetDate || lastResetDate < today))) {
-                localStorage.removeItem(STORAGE_KEY);
-                localStorage.setItem(TIMESTAMP_KEY, now.getTime().toString());
-                return { remainingTasks: [...tasks], lastReset: now.getTime() };
+                const tasks = rows.slice(1).map(row => ({
+                    id: row.c[0]?.v || '',
+                    description: row.c[1]?.v || '',
+                    weight: parseInt(row.c[2]?.v || 1),
+                    available: row.c[3]?.v === 'TRUE'
+                })).filter(task => task.available);
+
+                // Fetch last reset timestamp from Column F (index 5)
+                const lastReset = rows[0].c[5]?.v || 0; // F1
+                return { tasks, lastReset };
+            } catch (error) {
+                console.error('Error fetching tasks:', error);
+                return { tasks: [], lastReset: 0 };
             }
-
-            return {
-                remainingTasks: stored ? JSON.parse(stored) : [...tasks],
-                lastReset: lastReset ? parseInt(lastReset) : now.getTime()
-            };
         }
 
-        function saveStoredData(remainingTasks, lastReset) {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(remainingTasks));
-            localStorage.setItem(TIMESTAMP_KEY, lastReset.toString());
-        }
-
-        async function logTaskToGoogleSheet(task) {
-            const now = new Date();
-            const dateString = now.toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-
+        async function updateTaskAvailability(taskId) {
             try {
                 const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ date: dateString, task: task }),
+                    body: JSON.stringify({ action: 'updateTask', taskId }),
                     mode: 'cors',
                     redirect: 'follow'
                 });
-
-                const responseText = await response.text();
-                if (!response.ok) {
-                    console.error('Failed to log task:', response.status, response.statusText, responseText);
-                } else {
-                    console.log('Task logged successfully:', responseText);
-                }
+                const result = await response.text();
+                console.log('Update result:', result);
             } catch (error) {
-                console.error('Error logging task:', error);
+                console.error('Error updating task:', error);
             }
         }
 
-        async function getRandomTask() {
-            let { remainingTasks, lastReset } = getStoredData();
+        async function resetTasksInSheet(timestamp) {
+            try {
+                const response = await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'resetTasks', timestamp }),
+                    mode: 'cors',
+                    redirect: 'follow'
+                });
+                const result = await response.text();
+                console.log('Reset result:', result);
+            } catch (error) {
+                console.error('Error resetting tasks:', error);
+            }
+        }
 
-            if (remainingTasks.length === 0) {
+        function getStoredData(lastResetFromSheet) {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM
+            const lastResetDate = lastResetFromSheet ? new Date(parseInt(lastResetFromSheet)) : null;
+
+            // Reset if past 4 PM today and last reset was before today's 4 PM
+            if (lastResetFromSheet && (now >= today && (!lastResetDate || lastResetDate < today))) {
+                resetTasksInSheet(now.getTime());
+                return { remainingTasks: null, lastReset: now.getTime() };
+            }
+
+            return {
+                remainingTasks: null, // We'll always fetch from sheet
+                lastReset: lastResetFromSheet || now.getTime()
+            };
+        }
+
+        async function getRandomTask() {
+            const { tasks, lastReset } = await fetchTasksFromSheet();
+            const { lastReset: storedLastReset } = getStoredData(lastReset);
+
+            if (tasks.length === 0) {
                 return "No tasks left for today!";
             }
 
-            // Assign weights: first task gets highest weight (length), last gets 1
-            const weights = remainingTasks.map((_, index) => remainingTasks.length - index);
+            // Assign weights and select task
+            const weights = tasks.map(task => task.weight);
             const totalWeight = weights.reduce((sum, w) => sum + w, 0);
             let random = Math.random() * totalWeight;
 
@@ -140,17 +148,14 @@
                 }
             }
 
-            const selectedTask = remainingTasks[selectedIndex];
-            remainingTasks.splice(selectedIndex, 1);
-
-            saveStoredData(remainingTasks, lastReset);
-            await logTaskToGoogleSheet(selectedTask); // Log task to Google Sheet
-            return selectedTask;
+            const selectedTask = tasks[selectedIndex];
+            await updateTaskAvailability(selectedTask.id);
+            return selectedTask.description;
         }
 
-        function resetTasks() {
+        async function resetTasks() {
             const now = new Date().getTime();
-            saveStoredData([...tasks], now);
+            await resetTasksInSheet(now);
             document.getElementById('task').innerText = "Tasks reset! Scan to get a new task.";
         }
 
