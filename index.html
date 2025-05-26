@@ -52,29 +52,39 @@
         async function fetchTasksFromSheet() {
             try {
                 const response = await fetch(GOOGLE_SHEET_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
                 const text = await response.text();
                 const jsonString = text.match(/google\.visualization\.Query\.setResponse\((.*)\)/)[1];
                 const data = JSON.parse(jsonString);
                 const rows = data.table.rows;
 
-                const tasks = rows.slice(1).map(row => ({
-                    id: row.c[0]?.v || '',
-                    description: row.c[1]?.v || '',
-                    weight: parseInt(row.c[2]?.v || 1),
-                    available: row.c[3]?.v === 'TRUE'
-                })).filter(task => task.available);
+                const tasks = rows.slice(1).map(row => {
+                    const availableValue = row.c[3]?.v;
+                    // Handle both string "TRUE" and boolean true (from formulas like =TRUE)
+                    const isAvailable = availableValue === true || String(availableValue).toUpperCase() === 'TRUE';
+                    return {
+                        id: row.c[0]?.v || '',
+                        description: row.c[1]?.v || '',
+                        weight: parseInt(row.c[2]?.v || 1),
+                        available: isAvailable
+                    };
+                }).filter(task => task.available);
+                console.log('Fetched tasks:', tasks);
 
-                // Fetch last reset timestamp from Column F (index 5)
                 const lastReset = rows[0].c[5]?.v || 0; // F1
+                console.log('Last reset timestamp:', lastReset);
                 return { tasks, lastReset };
             } catch (error) {
-                console.error('Error fetching tasks:', error);
+                console.error('Error fetching tasks from Google Sheet:', error.message);
                 return { tasks: [], lastReset: 0 };
             }
         }
 
         async function updateTaskAvailability(taskId) {
             try {
+                console.log('Updating task ID:', taskId);
                 const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     headers: {
@@ -84,15 +94,19 @@
                     mode: 'cors',
                     redirect: 'follow'
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
                 const result = await response.text();
                 console.log('Update result:', result);
             } catch (error) {
-                console.error('Error updating task:', error);
+                console.error('Error updating task availability:', error.message);
             }
         }
 
         async function resetTasksInSheet(timestamp) {
             try {
+                console.log('Resetting tasks with timestamp:', timestamp);
                 const response = await fetch(GOOGLE_SCRIPT_URL, {
                     method: 'POST',
                     headers: {
@@ -102,26 +116,30 @@
                     mode: 'cors',
                     redirect: 'follow'
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
                 const result = await response.text();
                 console.log('Reset result:', result);
             } catch (error) {
-                console.error('Error resetting tasks:', error);
+                console.error('Error resetting tasks:', error.message);
             }
         }
 
         function getStoredData(lastResetFromSheet) {
             const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0, 0); // Today at 4 PM AKDT
             const lastResetDate = lastResetFromSheet ? new Date(parseInt(lastResetFromSheet)) : null;
 
             // Reset if past 4 PM today and last reset was before today's 4 PM
             if (lastResetFromSheet && (now >= today && (!lastResetDate || lastResetDate < today))) {
+                console.log('Triggering reset: Current time is past 4 PM or last reset was before today\'s 4 PM');
                 resetTasksInSheet(now.getTime());
                 return { remainingTasks: null, lastReset: now.getTime() };
             }
 
             return {
-                remainingTasks: null, // We'll always fetch from sheet
+                remainingTasks: null, // Always fetch from sheet
                 lastReset: lastResetFromSheet || now.getTime()
             };
         }
@@ -131,6 +149,7 @@
             const { lastReset: storedLastReset } = getStoredData(lastReset);
 
             if (tasks.length === 0) {
+                console.log('No tasks available to select');
                 return "No tasks left for today!";
             }
 
@@ -149,6 +168,7 @@
             }
 
             const selectedTask = tasks[selectedIndex];
+            console.log('Selected task:', selectedTask);
             await updateTaskAvailability(selectedTask.id);
             return selectedTask.description;
         }
