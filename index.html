@@ -43,56 +43,58 @@
   
   </div>
 
-  <script>
-    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxN0x5ZrmnX7I6XfV4OoZoc3TUYBsGoEqN2XN9wNmiV3E32igNodXViUEj9wMaJC5Oy/exec";
-    let rowIndex = null;
+  <<script>
+  const CORS_PROXY = "https://corsproxy.io/?"; // or try: "https://api.allorigins.win/raw?url="
+  const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxN0x5ZrmnX7I6XfV4OoZoc3TUYBsGoEqN2XN9wNmiV3E32igNodXViUEj9wMaJC5Oy/exec";
+  let rowIndex = null;
 
-    async function fetchRow() {
-      try {
-        const res = await fetch(WEB_APP_URL);
-        const data = await res.json();
+  async function fetchRow() {
+    try {
+      const response = await fetch(CORS_PROXY + encodeURIComponent(WEB_APP_URL));
+      const data = await response.json();
 
-        if (data.error) {
-          document.getElementById('output').textContent = data.error;
-          return;
-        }
-
-        rowIndex = data.rowIndex;
-        document.getElementById('output').textContent = data.string;
-        document.getElementById('nameInput').style.display = 'block';
-      } catch (e) {
-        console.error(e);
-        document.getElementById('output').textContent = "Failed to load data.";
+      if (data.error) {
+        document.getElementById('output').textContent = data.error;
+        return;
       }
+
+      rowIndex = data.rowIndex;
+      document.getElementById('output').textContent = data.string;
+      document.getElementById('nameInput').style.display = 'block';
+    } catch (e) {
+      console.error(e);
+      document.getElementById('output').textContent = "Failed to load data.";
     }
+  }
 
-    function sanitize(input) {
-      return input.replace(/[<>"'`;(){}]/g, "").trim();
-    }
+  function sanitize(input) {
+    return input.replace(/[<>"'`;(){}]/g, "").trim();
+  }
 
-    async function submitName() {
-      const name = sanitize(document.getElementById("userName").value);
-      if (!name || rowIndex === null) return alert("Enter a valid name.");
+  async function submitName() {
+    const name = sanitize(document.getElementById("userName").value);
+    if (!name || rowIndex === null) return alert("Enter a valid name.");
 
-      try {
-        const res = await fetch(WEB_APP_URL, {
-          method: "POST",
-          body: JSON.stringify({ name, rowIndex }),
-          headers: { "Content-Type": "application/json" }
-        });
-        const data = await res.json();
-        if (data.status === "success") {
-          document.getElementById("nameInput").innerHTML = `<strong>Name saved!</strong>`;
-        } else {
-          alert("Error: " + data.message);
-        }
-      } catch (e) {
-        alert("Error submitting name.");
-        console.error(e);
+    try {
+      const res = await fetch(WEB_APP_URL, {
+        method: "POST",
+        body: JSON.stringify({ name, rowIndex }),
+        headers: { "Content-Type": "application/json" }
+      });
+      const data = await res.json();
+      if (data.status === "success") {
+        document.getElementById("nameInput").innerHTML = `<strong>Name saved!</strong>`;
+      } else {
+        alert("Error: " + data.message);
       }
+    } catch (e) {
+      alert("Error submitting name.");
+      console.error(e);
     }
+  }
 
-    fetchRow();
-  </script>
+  fetchRow(); // call it on page load
+</script>
+
 </body>
 </html>
