@@ -1,50 +1,12 @@
-<!DOCTYPE html>
-     <html lang="en">
-     <head>
-         <meta charset="UTF-8">
-         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-         <title>Random Cleaning Task</title>
-         <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-         <style>
-             body {
-                 font-family: Arial, sans-serif;
-                 text-align: center;
-                 padding: 20px;
-                 background-color: #f0f0f0;
-             }
-             #task {
-                 font-size: 24px;
-                 margin: 20px 0;
-                 color: #333;
-             }
-             #qrcode {
-                 margin: 20px auto;
-             }
-             button {
-                 padding: 10px 20px;
-                 font-size: 16px;
-                 background-color: #4CAF50;
-                 color: white;
-                 border: none;
-                 border-radius: 5px;
-                 cursor: pointer;
-             }
-             button:hover {
-                 background-color: #45a049;
-             }
-             #resetButton {
-                 display: none; /* Hidden by default */
-             }
-         </style>
-     </head>
-     <body>
-         <h1>Daily Cleaning Task</h1>
-         <div id="task">Scan the QR code to get a task!</div>
-         <div id="qrcode"></div>
+</head>
+<body>
+  <h1>Your task is:</h1>
+  <div id="output">Loading...</div>
+  
+  </div>
 
-         <script>
-              
-             const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyks6EsHK-WEquCmGXrGi1LMSY_wACd5hYB-QBzsmJbcYZUc74yoVDEla3f5GcdstcC/exec";
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbyks6EsHK-WEquCmGXrGi1LMSY_wACd5hYB-QBzsmJbcYZUc74yoVDEla3f5GcdstcC/exec";
     let rowIndex = null;
 
     async function fetchRow() {
@@ -93,7 +55,6 @@
     }
 
     fetchRow();
-           
-         </script>
-     </body>
-     </html>
+  </script>
+</body>
+</html>
